@@ -20,6 +20,7 @@
 
 <nav class="tabs">
   <button class="tab-btn active" data-view="dashboard">Curva S / Dashboard</button>
+  <button class="tab-btn" data-view="gantt">Gantt de Avance</button>
   <button class="tab-btn" data-view="avance">Registrar Avance</button>
   <button class="tab-btn" data-view="partidas">Partidas (Línea Base)</button>
 </nav>
@@ -62,6 +63,19 @@
         <thead><tr><th>Frente</th><th>% Avance Real</th><th>% Avance Planificado</th><th>Desface</th><th>Estado</th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ===================== GANTT DE AVANCE ===================== -->
+  <section class="view" id="view-gantt">
+    <div class="card">
+      <h2>Gantt de Avance por Frente</h2>
+      <p class="save-hint">
+        Barra completa = rango de fechas de línea base del frente. Relleno de color = % de avance económico
+        (ponderado por presupuesto) ejecutado a hoy dentro de ese frente. Línea roja vertical = fecha de hoy.
+        Click en un frente para ver sus partidas individuales.
+      </p>
+      <div id="ganttWrap" style="overflow-x:auto;"></div>
     </div>
   </section>
 
