@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Avance de Obra — INARCO</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>Control de Avance de Obra</h1>
+    <p class="subtitle">Grupo INARCO — línea base vs. avance real</p>
+
+    <div id="msgBox"></div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Correo</label>
+        <input type="email" id="email" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" required autocomplete="current-password">
+      </div>
+      <div class="field" id="nombreField" style="display:none;">
+        <label for="nombreCompleto">Nombre completo</label>
+        <input type="text" id="nombreCompleto" placeholder="Ej. Jimmy Alvarez">
+      </div>
+      <button type="submit" class="btn" id="submitBtn">Ingresar</button>
+    </form>
+
+    <div class="toggle-link" id="toggleLink">
+      ¿No tienes cuenta? <a id="toggleAction">Regístrate</a>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-config.js"></script>
+<script>
+let mode = "login"; // "login" | "signup"
+
+const form = document.getElementById("loginForm");
+const submitBtn = document.getElementById("submitBtn");
+const toggleAction = document.getElementById("toggleAction");
+const toggleLink = document.getElementById("toggleLink");
+const nombreField = document.getElementById("nombreField");
+const msgBox = document.getElementById("msgBox");
+
+function setMode(newMode) {
+  mode = newMode;
+  if (mode === "signup") {
+    submitBtn.textContent = "Crear cuenta";
+    nombreField.style.display = "block";
+    toggleLink.innerHTML = '¿Ya tienes cuenta? <a id="toggleAction">Inicia sesión</a>';
+  } else {
+    submitBtn.textContent = "Ingresar";
+    nombreField.style.display = "none";
+    toggleLink.innerHTML = '¿No tienes cuenta? <a id="toggleAction">Regístrate</a>';
+  }
+  document.getElementById("toggleAction").addEventListener("click", () => setMode(mode === "login" ? "signup" : "login"));
+}
+toggleAction.addEventListener("click", () => setMode(mode === "login" ? "signup" : "login"));
+
+function showMsg(text, type) {
+  msgBox.innerHTML = `<div class="${type === 'error' ? 'error-msg' : 'success-msg'}">${text}</div>`;
+}
+
+// Ya logueado -> ir directo a la app
+supabaseClient.auth.getSession().then(({ data }) => {
+  if (data.session) window.location.href = "app.html";
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  msgBox.innerHTML = "";
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  submitBtn.disabled = true;
+
+  if (mode === "signup") {
+    const nombreCompleto = document.getElementById("nombreCompleto").value.trim();
+    const { error } = await supabaseClient.auth.signUp({
+      email, password,
+      options: { data: { nombre_completo: nombreCompleto || email } }
+    });
+    submitBtn.disabled = false;
+    if (error) { showMsg(error.message, "error"); return; }
+    showMsg("Cuenta creada. Si tu proyecto pide confirmación de correo, revisa tu bandeja. Ya puedes iniciar sesión.", "success");
+    setMode("login");
+  } else {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    submitBtn.disabled = false;
+    if (error) { showMsg(error.message, "error"); return; }
+    window.location.href = "app.html";
+  }
+});
+</script>
+</body>
+</html>

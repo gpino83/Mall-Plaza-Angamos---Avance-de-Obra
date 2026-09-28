@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Avance de Obra — INARCO</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Control de Avance de Obra</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <span class="who">Hola, <b id="userName">...</b> <span id="userRole"></span></span>
+    <button class="logout-btn" id="logoutBtn">Salir</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-view="dashboard">Curva S / Dashboard</button>
+  <button class="tab-btn" data-view="avance">Registrar Avance</button>
+  <button class="tab-btn" data-view="partidas">Partidas (Línea Base)</button>
+</nav>
+
+<main class="content">
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section class="view active" id="view-dashboard">
+    <div class="card">
+      <label style="font-size:12.5px; color:var(--text-secondary);">Proyecto</label><br>
+      <select id="proyectoSelectDash" style="margin-top:6px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);"></select>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="card">
+      <h2>Curva de Avance Económico (S/) — Línea base vs. valorización real</h2>
+      <p class="save-hint">Ponderada por presupuesto: refleja cuánto dinero del contrato se ha ejecutado. Es la curva que importa para facturación y flujo de caja.</p>
+      <div class="chart-wrap"><canvas id="curvaEconomicaChart"></canvas></div>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:#898781"></span>Línea base (planificado)</span>
+        <span><span class="legend-dot" style="background:#2a78d6"></span>Avance real acumulado</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Curva de Avance Físico / Ejecución (%) — Línea base vs. real</h2>
+      <p class="save-hint">Promedio simple entre todas las partidas (sin ponderar por costo): mide cuánta obra se está moviendo en el terreno, independiente del valor de cada partida.</p>
+      <div class="chart-wrap"><canvas id="curvaFisicaChart"></canvas></div>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:#898781"></span>Línea base (planificado)</span>
+        <span><span class="legend-dot" style="background:#1baf7a"></span>Avance real acumulado</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Desface por frente</h2>
+      <p class="save-hint">Desface económico (ponderado por presupuesto) por frente.</p>
+      <table class="data-table" id="tablaDesfaceFrente">
+        <thead><tr><th>Frente</th><th>% Avance Real</th><th>% Avance Planificado</th><th>Desface</th><th>Estado</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== REGISTRAR AVANCE ===================== -->
+  <section class="view" id="view-avance">
+    <div class="card">
+      <h2>Registrar avance semanal</h2>
+      <form class="avance-form" id="avanceForm">
+        <div class="field">
+          <label>Proyecto</label>
+          <select id="proyectoSelectAvance" required></select>
+        </div>
+        <div class="field full">
+          <label>Buscar partida</label>
+          <input type="text" id="buscarPartidaAvance" placeholder="Escribe para filtrar (ej. 'concreto', 'zapatas', 'pintura')...">
+        </div>
+        <div class="field full">
+          <label>Partida</label>
+          <select id="partidaSelect" required size="8" style="height:auto;"></select>
+        </div>
+        <div class="field">
+          <label>Semana (fecha de corte)</label>
+          <input type="date" id="semanaFin" required>
+        </div>
+        <div class="field">
+          <label>Metrado ejecutado esta semana <span id="unidadHint" style="color:var(--text-muted);"></span></label>
+          <input type="number" step="0.01" id="metradoEjecutado" required>
+        </div>
+        <div class="field full">
+          <label>Comentario (opcional)</label>
+          <input type="text" id="comentarioAvance" placeholder="Observaciones, motivo de atraso, etc.">
+        </div>
+        <div class="field full">
+          <button type="submit" class="btn">Guardar avance</button>
+        </div>
+      </form>
+      <div id="avanceMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Últimos avances registrados</h2>
+      <table class="data-table" id="tablaUltimosAvances">
+        <thead><tr><th>Fecha</th><th>Frente</th><th>Partida</th><th>Semana</th><th>Metrado ejec.</th><th>Registrado por</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== PARTIDAS / LINEA BASE ===================== -->
+  <section class="view" id="view-partidas">
+    <div class="card">
+      <h2>Partidas — Línea base contractual (metrado y presupuesto)</h2>
+      <p class="save-hint">Edita metrado total y precio unitario por partida — solo roles admin/planner (el presupuesto se recalcula solo). Los cambios se guardan automáticamente al salir del campo. Son ~1000 partidas: usa el buscador para filtrar.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <select id="proyectoSelectPartidas" style="padding:7px 10px; border-radius:8px; border:1px solid var(--border);"></select>
+        <input type="text" id="buscarPartida" placeholder="Buscar partida o frente..." style="flex:1; min-width:200px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);">
+      </div>
+      <table class="data-table" id="tablaPartidas">
+        <thead>
+          <tr>
+            <th>Frente / Partida</th>
+            <th>Inicio base</th>
+            <th>Fin base</th>
+            <th>Unidad</th>
+            <th>Metrado total</th>
+            <th>P.U. (S/)</th>
+            <th>Presupuesto (S/)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script src="js/supabase-config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
