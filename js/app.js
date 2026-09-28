@@ -360,16 +360,21 @@ function calcularCurvas() {
 }
 
 function renderDashboard() {
-  const { semanas, economicoPlan, economicoReal, fisicoPlan, fisicoReal, totalPresupuesto, nPartidasConMetrado } = calcularCurvas();
+  const { semanas, economicoPlan, economicoReal, fisicoPlan, fisicoReal, totalPresupuesto } = calcularCurvas();
   const hoy = new Date().toISOString().slice(0,10);
 
-  const econRealHoy = economicoReal.at(-1) || 0;
-  const econPlanHoy = economicoPlan.at(-1) || 0;
+  // Importante: los stats de "hoy" se calculan EN LA FECHA DE HOY, no tomando el último
+  // punto del gráfico (que llega hasta el fin de obra, no hasta la fecha actual).
+  const partidasConMetrado = PARTIDAS.filter(p => p.metrado_total > 0);
+  const n = partidasConMetrado.length;
+
+  const econRealHoy = PARTIDAS.reduce((sum, p) => sum + pesoEconomico(p, totalPresupuesto) * avanceRealAcumuladoEnFecha(p.id, hoy), 0) * 100;
+  const econPlanHoy = PARTIDAS.reduce((sum, p) => sum + pesoEconomico(p, totalPresupuesto) * avancePlanificadoEnFecha(p, hoy), 0) * 100;
   const econDesface = econRealHoy - econPlanHoy;
   const montoValorizado = totalPresupuesto * econRealHoy / 100;
 
-  const fisRealHoy = fisicoReal.at(-1) || 0;
-  const fisPlanHoy = fisicoPlan.at(-1) || 0;
+  const fisRealHoy = n === 0 ? 0 : partidasConMetrado.reduce((sum, p) => sum + avanceRealAcumuladoEnFecha(p.id, hoy), 0) / n * 100;
+  const fisPlanHoy = n === 0 ? 0 : partidasConMetrado.reduce((sum, p) => sum + avancePlanificadoEnFecha(p, hoy), 0) / n * 100;
   const fisDesface = fisRealHoy - fisPlanHoy;
 
   const statRow = document.getElementById("statRow");
