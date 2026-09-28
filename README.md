@@ -1,4 +1,4 @@
-# Control de Avance de Obra — INARCO
+# Control de Avance de Obra
 
 Sistema web para registrar avance semanal de obra (metrado + P.U.) contra la línea base
 valorizada del cronograma contractual, con curva S **física** (ejecución) y **económica**
