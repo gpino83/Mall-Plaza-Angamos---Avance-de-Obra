@@ -291,6 +291,7 @@ async function renderUltimosAvances() {
 // ---------------------------------------------------------
 let curvaEconomicaChartInstance = null;
 let curvaFisicaChartInstance = null;
+const GANTT_EXPANDED = new Set(); // frentes expandidos en el Gantt
 
 // Peso ECONÓMICO: participación de la partida en el presupuesto total (para la curva de valorización S/)
 function pesoEconomico(p, totalPresupuesto) {
@@ -389,7 +390,7 @@ function renderDashboard() {
     </div>
     <div class="stat-tile">
       <div class="label">Desface económico</div>
-      <div class="value ${econDesface >= 0 ? 'good' : 'bad'}">${econDesface >= 0 ? '+' : ''}${econDesface.toFixed(1)} pp</div>
+      <div class="value ${econDesface >= 0 ? 'good' : 'bad'}">${econDesface >= 0 ? '+' : ''}${econDesface.toFixed(1)}%</div>
     </div>
     <div class="stat-tile">
       <div class="label">Avance físico (ejecución)</div>
@@ -397,7 +398,7 @@ function renderDashboard() {
     </div>
     <div class="stat-tile">
       <div class="label">Desface físico</div>
-      <div class="value ${fisDesface >= 0 ? 'good' : 'bad'}">${fisDesface >= 0 ? '+' : ''}${fisDesface.toFixed(1)} pp</div>
+      <div class="value ${fisDesface >= 0 ? 'good' : 'bad'}">${fisDesface >= 0 ? '+' : ''}${fisDesface.toFixed(1)}%</div>
     </div>
     <div class="stat-tile">
       <div class="label">Presupuesto total (línea base)</div>
@@ -424,6 +425,7 @@ function renderDashboard() {
   curvaFisicaChartInstance = new Chart(fisCtx, lineChartConfig(labels, fisicoPlan, fisicoReal, "#898781", "#1baf7a", "rgba(27,175,122,0.08)"));
 
   renderTablaDesfacePorFrente(totalPresupuesto, hoy);
+  renderGantt();
 }
 
 function lineChartConfig(labels, planData, realData, colorPlan, colorReal, fillReal) {
@@ -472,10 +474,126 @@ function renderTablaDesfacePorFrente(totalPresupuesto, hoy) {
         <td>${escapeHtml(frente)}</td>
         <td>${real.toFixed(1)}%</td>
         <td>${plan.toFixed(1)}%</td>
-        <td style="color:${desface >= 0 ? 'var(--green)' : 'var(--red)'}">${desface >= 0 ? '+' : ''}${desface.toFixed(1)} pp</td>
+        <td style="color:${desface >= 0 ? 'var(--green)' : 'var(--red)'}">${desface >= 0 ? '+' : ''}${desface.toFixed(1)}%</td>
         <td><span class="badge ${badge}">${texto}</span></td>
       </tr>
     `);
+  });
+}
+
+// ---------------------------------------------------------
+// Vista: GANTT DE AVANCE (por frente, expandible a partidas)
+// ---------------------------------------------------------
+function renderGantt() {
+  const wrap = document.getElementById("ganttWrap");
+  if (!wrap) return;
+
+  if (PARTIDAS.length === 0) {
+    wrap.innerHTML = `<p style="color:var(--text-muted);">Sin partidas cargadas para este proyecto.</p>`;
+    return;
+  }
+
+  const totalPresupuesto = PARTIDAS.reduce((s,p) => s + (p.presupuesto_total || 0), 0);
+  const hoy = new Date().toISOString().slice(0,10);
+
+  const conFechas = PARTIDAS.filter(p => p.fecha_inicio_base && p.fecha_fin_base);
+  if (conFechas.length === 0) {
+    wrap.innerHTML = `<p style="color:var(--text-muted);">Ninguna partida tiene fechas base cargadas todavía.</p>`;
+    return;
+  }
+
+  const start = new Date(Math.min(...conFechas.map(p => new Date(p.fecha_inicio_base))));
+  const end = new Date(Math.max(...conFechas.map(p => new Date(p.fecha_fin_base))));
+  const totalMs = end - start;
+  if (!(totalMs > 0)) {
+    wrap.innerHTML = `<p style="color:var(--text-muted);">Fechas base insuficientes para dibujar el Gantt.</p>`;
+    return;
+  }
+
+  const pct = (date) => Math.max(0, Math.min(100, (date - start) / totalMs * 100));
+  const todayPct = pct(new Date());
+
+  // Agrupa por frente y calcula rango de fechas + % avance económico a hoy
+  const frentes = [...new Set(PARTIDAS.map(p => p.frente))];
+  const frenteData = frentes.map(frente => {
+    const partidasFrente = PARTIDAS.filter(p => p.frente === frente && p.fecha_inicio_base && p.fecha_fin_base);
+    if (partidasFrente.length === 0) return null;
+    const fIni = new Date(Math.min(...partidasFrente.map(p => new Date(p.fecha_inicio_base))));
+    const fFin = new Date(Math.max(...partidasFrente.map(p => new Date(p.fecha_fin_base))));
+    const pesoTotalFrente = partidasFrente.reduce((s,p) => s + pesoEconomico(p, totalPresupuesto), 0);
+    const real = pesoTotalFrente > 0
+      ? partidasFrente.reduce((s,p) => s + pesoEconomico(p, totalPresupuesto) * avanceRealAcumuladoEnFecha(p.id, hoy), 0) / pesoTotalFrente * 100
+      : 0;
+    return { frente, partidas: partidasFrente, fIni, fFin, real };
+  }).filter(Boolean);
+
+  // Meses para la cabecera de la grilla
+  const meses = [];
+  let dm = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (dm <= end) {
+    meses.push(new Date(dm));
+    dm.setMonth(dm.getMonth() + 1);
+  }
+  const mesesNombres = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  const gridlinesHtml = meses.map(m =>
+    `<div class="gantt-gridline" style="left:${pct(m)}%"></div><div class="gantt-month-label" style="left:${pct(m)}%">${mesesNombres[m.getMonth()]} ${m.getFullYear()}</div>`
+  ).join("");
+
+  let labelsHtml = `<div class="gantt-row gantt-header-row"><div class="gantt-label"></div></div>`;
+  let tracksHtml = `<div class="gantt-track-row header-row"><div class="gantt-gridlines">${gridlinesHtml}</div></div>`;
+
+  function barRow(left, width, avancePct, colorFill) {
+    const w = Math.max(width, 0.4);
+    const fillW = w * Math.max(0, Math.min(avancePct, 100)) / 100;
+    const completo = avancePct >= 100;
+    return `
+      <div class="gantt-bar-bg" style="left:${left}%; width:${w}%;"></div>
+      <div class="gantt-bar-fill ${completo ? 'completo' : ''}" style="left:${left}%; width:${fillW}%; background:${colorFill};"></div>
+      <div class="gantt-pct-label" style="left:${Math.min(left + w + 1, 95)}%;">${avancePct.toFixed(0)}%</div>
+      <div class="gantt-today-line" style="left:${todayPct}%;"></div>
+    `;
+  }
+
+  frenteData.forEach(fd => {
+    const expanded = GANTT_EXPANDED.has(fd.frente);
+    const left = pct(fd.fIni);
+    const width = pct(fd.fFin) - left;
+
+    labelsHtml += `<div class="gantt-row frente-row" data-frente="${escapeAttr(fd.frente)}"><div class="gantt-label">${expanded ? '▾' : '▸'} ${escapeHtml(fd.frente)}</div></div>`;
+    tracksHtml += `<div class="gantt-track-row frente-row" data-frente="${escapeAttr(fd.frente)}">${barRow(left, width, fd.real, '#2a78d6')}</div>`;
+
+    if (expanded) {
+      fd.partidas.forEach(p => {
+        const pReal = avanceRealAcumuladoEnFecha(p.id, hoy) * 100;
+        const pLeft = pct(new Date(p.fecha_inicio_base));
+        const pWidth = pct(new Date(p.fecha_fin_base)) - pLeft;
+
+        labelsHtml += `<div class="gantt-row partida-row"><div class="gantt-label" title="${escapeAttr(p.nombre)}">${escapeHtml(p.nombre)}</div></div>`;
+        tracksHtml += `<div class="gantt-track-row">${barRow(pLeft, pWidth, pReal, '#1baf7a')}</div>`;
+      });
+    }
+  });
+
+  wrap.innerHTML = `
+    <div class="gantt-chart">
+      <div class="gantt-labels-col">${labelsHtml}</div>
+      <div class="gantt-chart-col">${tracksHtml}</div>
+    </div>
+    <div class="legend-row">
+      <span><span class="legend-dot" style="background:#2a78d6"></span>Avance económico por frente</span>
+      <span><span class="legend-dot" style="background:#1baf7a"></span>Avance económico por partida (al expandir)</span>
+      <span><span class="legend-dot" style="background:var(--red)"></span>Hoy</span>
+    </div>
+  `;
+
+  wrap.querySelectorAll(".frente-row[data-frente]").forEach(row => {
+    row.addEventListener("click", () => {
+      const frente = row.dataset.frente;
+      if (GANTT_EXPANDED.has(frente)) GANTT_EXPANDED.delete(frente);
+      else GANTT_EXPANDED.add(frente);
+      renderGantt();
+    });
   });
 }
 
